@@ -1,0 +1,103 @@
+Detailed Install instructions (step by step setup on Ubuntu or Debian Distro server)
+
+//comments describing the commands to run from terminal
+
+//Get required server packages installed
+
+sudo apt-get install openssh-server
+sudo apt-get install apache2
+sudo apt-get install mysql-server
+     (you setup root pw during install, keep this info somewhere!)
+sudo apt-get install php5
+sudo apt-get install php5-mysql   
+sudo apt-get install php5-curl
+sudo apt-get install phpmyadmin
+
+//enable modrewrite
+sudo a2enmod rewrite
+
+//allow .htaccess files to be used
+sudo nano  /etc/apache2/sites-enabled/000-default    (change AllowOverride None to AllowOverride All for /var/www (for all sites) just your web directory)
+
+// restart apache
+sudo /etc/init.d/apache2 restart
+
+create database and dbuser
+//from terminal, login to mysql shell
+mysql -u root - p   (enter pw you created during install)
+//create db REPLACE values with your dbname, your dbuser and YOUR dbpassword!
+create database solarmonitoring
+// create user and grant permissions to db
+create USER 'appuser'@'localhost' IDENTIFIED BY 'password';
+// set permissions for appuser on greenwifiapp
+GRANT ALL ON solarmonitoring.* TO appuser@'localhost';
+// refresh privileges
+FLUSH PRIVILEGES;
+// leave mysql shell
+exit
+
+set permissions for /var/www so you can upload the app files.
+//add myserveracct user to the www-data group
+sudo adduser myserveracct www-data  *replace myserveracct with the server acct that allows you to login with
+sudo chown -R www-data:www-data /var/www
+sudo chmod -R g+rw /var/www
+
+** I also needed to use this command for EC2
+sudo chown -R ubuntu:www-data /var/www
+
+
+upload application folder to server webroot folder (via sftp)
+using an SFTP client is probably the easiest or use whatever method you are familiar with (wget, etc..)
+**make sure .htaccess file is in the root directory.  Sometimes it isn't uploaded and you have to add it manually. Nothing works without this!
+
+*enable write access to /csv 
+**optional - enable write access to /logs/raw_json_files -- this allows the files to be written as text files
+cd /logs
+sudo chown -R www-data:www-data raw_json_files
+
+//launch mysql shell
+mysql -u root -p
+//select our db
+use greenwifiapp;
+//execute dbcreate script
+source /pathtowebappdirectory/install/greenwifiapp-lastest.sql; 
+
+//setup timezone table (we WILL need it)
+mysql_tzinfo_to_sql /usr/share/zoneinfo | mysql -u root -p<yourpassword> mysql  
+
+// EC2 install is a little different
+mysql_tzinfo_to_sql /usr/share/zoneinfo | mysql -uroot -p mysql
+
+
+
+
+
+// Configure App:
+
+**You could do this before you upload the files if you know all of the information beforehand.  Otherwise edit via any text editor (nano), or SFTP capable editor (Coda, BBEdit)
+	a) in /application/config/config.php
+		1) set $config['base_url'] to the public URI  (e.g. http://mywebsite.com or http://mywebsite.com/thisapp)
+		2) set $config['server_TZ'] to your appropriate server TZ
+		3) set $config['system_golivedate'] to the appropriate system go live date.
+		
+	b) in /application/config/database.php
+		1) set hostname, username, password and database to appropriate values for your environment
+
+4) Setup default site:
+	a) Visit app url - http://mywebsite.com/setup
+	b) enter default site information (set public ID and REMEMBER IT)
+5) setup remote monitoring task
+ 	a) use this syntax to create a cron job
+	0,15,30,45 * * * * wget -O - -q -t 1 --spider http://mywebsite.com/datalogger/collector/$PUBLICID
+	
+	*replace $PUBLICID with the public key for your monitoring site as well as the public URL of the app.  This job polls every 15 	minutes, but you could (in theory) use a different interval and everything should still work 
+
+// if seeing errors, try looking at apache logs.  
+Debian / Ubuntu Linux Apache error log file location - /var/log/apache2/error.log
+
+
+
+
+
+
+
